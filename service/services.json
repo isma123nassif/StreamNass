@@ -1,0 +1,17 @@
+{
+    "id": "org.stremio.lgos.server",
+    "description": "Stremio LGOS Server",
+    "services": [
+        {
+            "name": "org.stremio.lgos.server",
+            "description": "Stremio streaming server and UI host",
+            "commands": [
+                {
+                    "name": "start",
+                    "description": "Boot the local HTTP server and report readiness",
+                    "public": true
+                }
+            ]
+        }
+    ]
+}

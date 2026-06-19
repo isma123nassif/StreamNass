@@ -1,0 +1,90 @@
+// Copyright (C) 2017-2024 Smart code 203358507
+
+@import (reference) '~@stremio/stremio-colors/less/stremio-colors.less';
+@import (reference) '~stremio/common/screen-sizes.less';
+
+.category-row-container {
+    overflow: visible;
+
+    .header-container {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        padding: 0 1rem;
+        margin-bottom: 0.5rem;
+
+        .title-container {
+            flex: 1;
+            max-height: 2.4em;
+            font-size: 1.9rem;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            color: var(--primary-foreground-color);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .see-all-container {
+            flex: none;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            max-width: 12rem;
+            height: 2.6rem;
+            padding: 0 0.6rem 0 1.1rem;
+            border-radius: 2.6rem;
+            opacity: 0.7;
+            transition: background-color 0.15s ease-out, opacity 0.15s ease-out, box-shadow 0.15s ease-out;
+
+            &:hover, &:focus {
+                outline: none;
+                background-color: var(--overlay-color);
+                opacity: 1;
+                box-shadow: var(--card-focus-glow);
+            }
+
+            .label {
+                flex: 0 1 auto;
+                max-height: 1.2em;
+                font-size: 1.05rem;
+                font-weight: 600;
+                color: var(--primary-foreground-color);
+                white-space: nowrap;
+            }
+
+            .icon {
+                flex: none;
+                height: 1.4rem;
+                margin-left: 0.4rem;
+                color: var(--primary-foreground-color);
+            }
+        }
+    }
+
+    .cards-container {
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        gap: 1rem;
+        padding: 0.5rem 1rem;
+        overflow-x: auto;
+        overflow-y: visible;
+        scrollbar-width: none;
+
+        &::-webkit-scrollbar {
+            display: none;
+        }
+
+        &.wrap {
+            flex-wrap: wrap;
+            overflow-x: visible;
+        }
+
+        .category-card {
+            &:first-child {
+                margin-left: 0;
+            }
+        }
+    }
+}

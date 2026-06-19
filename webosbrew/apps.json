@@ -1,0 +1,18 @@
+{
+  "paging": {
+    "page": 1,
+    "count": 1,
+    "maxPage": 1,
+    "itemsTotal": 1
+  },
+  "packages": [
+    {
+      "id": "org.stremio.lgos",
+      "title": "StreamNass",
+      "iconUri": "https://raw.githubusercontent.com/isma123nassif/StreamNass/main/app/icon.png",
+      "manifestUrl": "https://github.com/isma123nassif/StreamNass/releases/latest/download/manifest.json",
+      "pool": "main",
+      "shortDescription": "Stremio para LG webOS, rediseñado y optimizado para TV con mando."
+    }
+  ]
+}
