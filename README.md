@@ -1,93 +1,93 @@
 # StreamNass
 
-**Stremio para LG webOS, rediseñado y optimizado para la experiencia en TV con mando.**
+**Stremio for LG webOS, redesigned and optimized for the TV-with-remote experience.**
 
-StreamNass es un fork de [Stremio](https://www.stremio.com/) para televisores LG webOS. Toma el frontend de [stremio-web](https://github.com/Stremio/stremio-web) y el servidor de streaming oficial, les aplica un *facelift* estilo Nuvio y los adapta para que todo se maneje cómodamente desde el mando a distancia, sin ratón ni teclado.
+StreamNass is a fork of [Stremio](https://www.stremio.com/) for LG webOS TVs. It takes the [stremio-web](https://github.com/Stremio/stremio-web) frontend and the official streaming server, gives them a Nuvio-style *facelift*, and adapts everything so it can be driven comfortably from the remote — no mouse or keyboard needed.
 
-> Monorepo: incluye tanto el **wrapper de webOS** (`app/`, `service/`) como el **frontend** modificado (`frontend/`). Un solo `make deploy` lo compila e instala en la TV.
+> Monorepo: includes both the **webOS wrapper** (`app/`, `service/`) and the modified **frontend** (`frontend/`). A single `make deploy` builds and installs it on the TV.
 
 ---
 
-## ✨ Mejoras sobre el Stremio oficial
+## ✨ Improvements over official Stremio
 
-### 🎮 Navegación con mando (D-pad)
-- Motor de navegación propio (`useTVNavigation`) con regiones **topbar / sidebar / contenido** y saltos entre bordes.
-- **Memoria de foco por ruta**: al volver a una pantalla recuperas el elemento donde estabas, no el principio.
-- Selección del elemento **visible** (el router de stremio-web mantiene varias rutas montadas a la vez).
-- Auto-scroll que **centra** el elemento enfocado.
-- Indicador de foco claro en la barra lateral y las pestañas.
+### 🎮 Remote (D-pad) navigation
+- Custom navigation engine (`useTVNavigation`) with **topbar / sidebar / content** regions and edge-to-edge jumps.
+- **Per-route focus memory**: when you return to a screen, you land back on the element you left, not the top.
+- Selects the **visible** instance (the stremio-web router keeps several routes mounted at once).
+- Auto-scroll that **centers** the focused element.
+- Clear focus indicator on the sidebar and tabs.
 
-### 🏠 Inicio (Board) tipo Nuvio
-- **Continuar viendo** como primer bloque, reanudando con la última fuente usada.
-- Hero destacado, filas por **género** y **plataforma**, y **colecciones de sagas**.
-- Tus **recomendaciones** y catálogos de addons al final.
+### 🏠 Nuvio-style Home (Board)
+- **Continue Watching** as the first block, resuming with the last source used.
+- Featured hero, rows by **genre** and **platform**, and **saga collections**.
+- Your **recommendations** and addon catalogs at the bottom.
 
 ### 🔎 Discover
-- Pósters a **tamaño grande** (sin barra lateral derecha).
-- Año, duración y nota IMDb bajo el título.
+- **Large** posters (no right sidebar).
+- Year, runtime and IMDb rating under the title.
 
-### 📺 Selección de fuente (StreamsList)
-- Pestañas tipo *pill* por addon.
-- Streams agrupados con **badges de calidad**.
+### 📺 Source selection (StreamsList)
+- *Pill*-style tabs per addon.
+- Streams grouped with **quality badges**.
 
-### ▶️ Reproductor
-- Esquema de teclas pensado para mando, foco visible en los menús y botones más grandes.
-- **Selección automática del idioma de audio** según tu perfil de Stremio (corrige el bug del Stremio oficial, que siempre reproduce la primera pista ignorando tu idioma preferido). Las pistas se leen del *pipeline* nativo de la TV para que los índices coincidan.
+### ▶️ Player
+- Remote-friendly key scheme, visible focus in menus, and larger buttons.
+- **Automatic audio-language selection** based on your Stremio profile (fixes the official Stremio bug that always plays the first track, ignoring your preferred language). Tracks are read from the TV's native pipeline so the indices line up.
 
-### ⚙️ Estabilidad y plataforma webOS
-- **Vídeo nativo webOS**: `device.ts` con el *casing* `webOS` correcto para `selectVideoImplementation`, y un *shim* de `window.webOS` sobre `PalmServiceBridge`.
-- **Reproducción nativa en URLs directas** (parche `use-native-decode-on-direct-url`).
-- **Arreglo del relaunch**: la app vuelve a abrir desde el icono de la TV aunque hayas ido al Home y vuelto.
-- **Puerto del servidor reubicado** `11470 → 11548` para no chocar con el Stremio de la LG Content Store (que provocaba un `EADDRINUSE` al arrancar).
-- Arreglos de teclado en la búsqueda.
+### ⚙️ Stability and webOS platform
+- **Native webOS video**: `device.ts` with the correct `webOS` casing for `selectVideoImplementation`, plus a `window.webOS` shim over `PalmServiceBridge`.
+- **Native playback on direct URLs** (`use-native-decode-on-direct-url` patch).
+- **Relaunch fix**: the app reopens from the TV icon even after going Home and back.
+- **Server port relocated** `11470 → 11548` to avoid colliding with the LG Content Store's Stremio (which caused an `EADDRINUSE` crash on boot).
+- Search keyboard fixes.
 
 ---
 
-## 🗂 Estructura
+## 🗂 Structure
 
 ```
-app/        # Shell de la app webOS — arranca el servicio y redirige a http://127.0.0.1:8080
-service/    # Servicio webOS — sirve el frontend en :8080 y proxea la API al servidor de streaming
-frontend/   # Fork de stremio-web con el facelift y la navegación TV
-patches/    # Parches aplicados durante el build (audio, teclado, decode nativo)
+app/        # webOS app shell — starts the service and redirects to http://127.0.0.1:8080
+service/    # webOS service — serves the frontend on :8080 and proxies the API to the streaming server
+frontend/   # stremio-web fork with the facelift and TV navigation
+patches/    # Patches applied during the build (audio, keyboard, native decode)
 Makefile    # build / package / deploy / restart / clean
 ```
 
-Algunos ficheros se **descargan o generan en el build** y no están en el repo:
-`service/server.js` (servidor de streaming oficial), `service/bin/ffmpeg`+`ffprobe`, `service/www/` (build del frontend) y `frontend/node_modules`. Ejecuta `make build` para generarlos.
+Some files are **downloaded or generated during the build** and are not in the repo:
+`service/server.js` (official streaming server), `service/bin/ffmpeg`+`ffprobe`, `service/www/` (frontend build) and `frontend/node_modules`. Run `make build` to generate them.
 
 ---
 
-## 🚀 Instalación
+## 🚀 Installation
 
-### Requisitos
-1. [webOS ares CLI](https://www.npmjs.com/package/@webosose/ares-cli) — `npm i -g @webosose/ares-cli` (necesita Node.js 20).
-2. [Modo desarrollador](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app) activado en la TV, o [Homebrew Channel](https://github.com/webosbrew/webos-homebrew-channel) si está rooteada.
-3. La TV dada de alta como dispositivo en ares — `ares-setup-device`.
+### Requirements
+1. [webOS ares CLI](https://www.npmjs.com/package/@webosose/ares-cli) — `npm i -g @webosose/ares-cli` (needs Node.js 20).
+2. [Developer Mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app) enabled on the TV, or [Homebrew Channel](https://github.com/webosbrew/webos-homebrew-channel) if it's rooted.
+3. The TV registered as an ares device — `ares-setup-device`.
 
-### Compilar e instalar
+### Build and install
 ```sh
-make deploy                 # descarga deps, compila, empaqueta el IPK, instala y lanza
-make deploy DEVICE=mytv     # si tu dispositivo ares se llama distinto a "tv"
+make deploy                 # downloads deps, builds, packages the IPK, installs and launches
+make deploy DEVICE=mytv     # if your ares device is named something other than "tv"
 ```
 
-### Otros comandos
+### Other commands
 ```sh
-make build      # descarga deps + compila el frontend (sin instalar)
-make package    # build + crea el IPK
-make restart    # cierra y relanza en la TV
-make clean      # borra los artefactos de build
+make build      # download deps + build the frontend (no install)
+make package    # build + create the IPK
+make restart    # close and relaunch on the TV
+make clean      # remove build artifacts
 ```
 
 ---
 
-## 🙏 Créditos
+## 🙏 Credits
 
-Construido sobre el trabajo de:
-- [Stremio](https://www.stremio.com/) y [stremio-web](https://github.com/Stremio/stremio-web)
-- [kieranbrown/stremio-webos](https://github.com/kieranbrown/stremio-webos) — wrapper de webOS base
+Built on top of the work of:
+- [Stremio](https://www.stremio.com/) and [stremio-web](https://github.com/Stremio/stremio-web)
+- [kieranbrown/stremio-webos](https://github.com/kieranbrown/stremio-webos) — base webOS wrapper
 - [webOS Homebrew Project](https://www.webosbrew.org/)
 
-El estilo visual se inspira en [Nuvio](https://github.com/tapframe/NuvioStreams).
+The visual style is inspired by [Nuvio](https://github.com/tapframe/NuvioStreams).
 
-> Proyecto personal. Stremio es marca de Smart Code Ltd. StreamNass no está afiliado a Stremio ni a LG.
+> Personal project. Stremio is a trademark of Smart Code Ltd. StreamNass is not affiliated with Stremio or LG.
