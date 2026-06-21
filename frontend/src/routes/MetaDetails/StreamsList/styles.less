@@ -217,6 +217,16 @@
             &:focus:global(.selected) {
                 box-shadow: 0 0 0 0.2rem var(--primary-accent-color) inset;
             }
+
+            // Filtro sin coincidencias en este titulo: se ve apagado para que
+            // quede claro que "no hay", no que este roto.
+            &:global(.disabled) {
+                opacity: 0.35;
+
+                .addon-tab-label {
+                    opacity: 0.6;
+                }
+            }
         }
     }
 

@@ -16,6 +16,33 @@ const { default: SeasonEpisodePicker } = require('../EpisodePicker');
 
 const ALL_ADDONS_KEY = 'ALL';
 
+// --- Filtros de fuentes (TV) -------------------------------------------------
+// Detectan idioma/resolucion a partir del texto del stream (name + description),
+// que es lo unico fiable que exponen los addons. Son heuristicas: se pueden
+// afinar anadiendo palabras clave segun lo que use cada addon real.
+const QUALITY_4K_RE = /\b(2160p|4k|uhd)\b/i;
+const SPANISH_RE = /(castellano|espa(?:n|ñ)ol|spanish|🇪🇸|\bes-?es\b|\bspa\b|\bcast\b|\besp\b|\bvose?\b)/i;
+const LATINO_RE = /(latino|latinoam|mexicano|\blat\b|🇲🇽|🇦🇷|🇨🇴|🇨🇱|🇵🇪|🇻🇪)/i;
+const CASTELLANO_EXPLICIT_RE = /(castellano|🇪🇸|\bcast\b|\bes-?es\b)/i;
+
+const streamText = (stream) => `${stream && stream.name || ''} ${stream && stream.description || ''}`;
+
+const streamIs4K = (stream) => QUALITY_4K_RE.test(streamText(stream));
+
+const streamIsCastellano = (stream) => {
+    const text = streamText(stream);
+    if (!SPANISH_RE.test(text)) {
+        return false;
+    }
+    // Marcadores explicitos de Espana ganan aunque tambien aparezca "latino".
+    if (CASTELLANO_EXPLICIT_RE.test(text)) {
+        return true;
+    }
+    // "Spanish/Espanol" generico: solo cuenta como castellano si NO esta marcado latino.
+    return !LATINO_RE.test(text);
+};
+// ----------------------------------------------------------------------------
+
 const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }) => {
     const { t } = useTranslation();
     const core = useCore();
@@ -79,8 +106,38 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }) => {
                 :
                 [];
     }, [streamsByAddon, selectedAddon]);
+    // Filtros TV combinables: castellano y 4K. Se aplican sobre los grupos ya
+    // agrupados por addon; los grupos que quedan vacios se descartan.
+    const [onlyCastellano, setOnlyCastellano] = React.useState(false);
+    const [only4K, setOnly4K] = React.useState(false);
+    const filteredGroups = React.useMemo(() => {
+        if (!onlyCastellano && !only4K) {
+            return streamGroups;
+        }
+        return streamGroups
+            .map((group) => ({
+                ...group,
+                streams: group.streams.filter((stream) =>
+                    (!only4K || streamIs4K(stream)) &&
+                    (!onlyCastellano || streamIsCastellano(stream))
+                )
+            }))
+            .filter((group) => group.streams.length > 0);
+    }, [streamGroups, onlyCastellano, only4K]);
+    // Total sin filtrar: sirve para distinguir "cargando" de "filtro sin resultados".
     const totalStreams = React.useMemo(() => {
         return streamGroups.reduce((count, group) => count + group.streams.length, 0);
+    }, [streamGroups]);
+    const filteredTotal = React.useMemo(() => {
+        return filteredGroups.reduce((count, group) => count + group.streams.length, 0);
+    }, [filteredGroups]);
+    // Cuantos streams casan cada filtro (en el alcance del addon seleccionado),
+    // para mostrar el contador y desactivar la pildora cuando es 0.
+    const castellanoCount = React.useMemo(() => {
+        return streamGroups.reduce((n, g) => n + g.streams.filter(streamIsCastellano).length, 0);
+    }, [streamGroups]);
+    const count4K = React.useMemo(() => {
+        return streamGroups.reduce((n, g) => n + g.streams.filter(streamIs4K).length, 0);
     }, [streamGroups]);
     const showGroupHeaders = selectedAddon === ALL_ADDONS_KEY && Object.keys(streamsByAddon).length > 1;
     // Filter pills: "All" + one per addon.
@@ -122,6 +179,29 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }) => {
                                 <div className={styles['addon-tab-label']}>{tab.label}</div>
                             </Button>
                         ))}
+                    </div>
+                    :
+                    null
+            }
+            {
+                totalStreams > 0 ?
+                    <div className={styles['addon-tabs']}>
+                        <Button
+                            title={'Castellano'}
+                            tabIndex={0}
+                            className={classnames(styles['addon-tab'], { 'selected': onlyCastellano, 'disabled': castellanoCount === 0 })}
+                            onClick={castellanoCount === 0 ? null : () => setOnlyCastellano((v) => !v)}
+                        >
+                            <div className={styles['addon-tab-label']}>🇪🇸 Castellano ({castellanoCount})</div>
+                        </Button>
+                        <Button
+                            title={'4K'}
+                            tabIndex={0}
+                            className={classnames(styles['addon-tab'], { 'selected': only4K, 'disabled': count4K === 0 })}
+                            onClick={count4K === 0 ? null : () => setOnly4K((v) => !v)}
+                        >
+                            <div className={styles['addon-tab-label']}>4K ({count4K})</div>
+                        </Button>
                     </div>
                     :
                     null
@@ -169,9 +249,24 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }) => {
                                 <Stream.Placeholder />
                             </div>
                             :
+                            filteredTotal === 0 ?
+                                <div className={styles['message-container']}>
+                                    <Image className={styles['image']} src={require('/assets/images/empty.png')} alt={' '} />
+                                    <div className={styles['label']}>{t('NO_STREAM')}</div>
+                                    <Button
+                                        className={styles['install-button-container']}
+                                        title={'Quitar filtros'}
+                                        tabIndex={0}
+                                        onClick={() => { setOnlyCastellano(false); setOnly4K(false); }}
+                                    >
+                                        <Icon className={styles['icon']} name={'close'} />
+                                        <div className={styles['label']}>Quitar filtros</div>
+                                    </Button>
+                                </div>
+                                :
                             <React.Fragment>
                                 <div className={styles['streams-container']} data-tv-focus-default ref={streamsContainerRef}>
-                                    {streamGroups.map((group) => (
+                                    {filteredGroups.map((group) => (
                                         <div key={group.addon.transportUrl} className={styles['stream-group']}>
                                             {
                                                 showGroupHeaders ?
