@@ -126,7 +126,10 @@ const collectFocusables = (root, selector) => {
     }
     const nodes = root.querySelectorAll(selector || FOCUSABLE_SELECTOR);
     for (let i = 0; i < nodes.length; i++) {
-        if (isVisible(nodes[i])) {
+        // [data-tv-skip] marks a subtree as off-limits to the D-pad (e.g. the
+        // movie/series meta info — genre/cast/director links and synopsis — so the
+        // remote stays on the source list instead of wandering into read-only text).
+        if (isVisible(nodes[i]) && !nodes[i].closest('[data-tv-skip]')) {
             out.push(nodes[i]);
         }
     }
@@ -330,11 +333,55 @@ const useTVNavigation = () => {
             return true;
         };
 
+        // Long-press OK (Enter) on a "Continue Watching" poster removes it; a short
+        // press still plays. Such items expose the dismiss target via [data-tv-dismiss].
+        let okHeld = false;
+        let okTimer = null;
+        let okLongFired = false;
+        const DISMISS_HOLD_MS = 500;
+        const isEnter = (event) => event.key === 'Enter' || event.keyCode === 13;
+        const onKeyUp = (event) => {
+            if (!isEnter(event) || !okHeld) {
+                return;
+            }
+            okHeld = false;
+            clearTimeout(okTimer);
+            if (!okLongFired) {
+                // Short press: trigger the focused item's normal action (play).
+                const active = document.activeElement;
+                if (active && typeof active.click === 'function') {
+                    active.click();
+                }
+            }
+            okLongFired = false;
+        };
+
         const onKeyDown = (event) => {
             // The video player owns ALL remote keys (its own TV control scheme in
             // Player.js handles arrows / OK / Back). Stay completely out of the way.
             if (isPlayerRoute()) {
                 return;
+            }
+            // Long-press OK removes a Continue Watching item; short press plays it.
+            if (isEnter(event)) {
+                const active = document.activeElement;
+                const dismissEl = active && typeof active.querySelector === 'function' ?
+                    active.querySelector('[data-tv-dismiss]') : null;
+                if (dismissEl) {
+                    // Take over Enter so the button doesn't play immediately; the hold
+                    // duration decides (keyup before timer = play, timer fires = dismiss).
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    if (!okHeld) {
+                        okHeld = true;
+                        okLongFired = false;
+                        okTimer = setTimeout(() => {
+                            okLongFired = true;
+                            dismissEl.click();
+                        }, DISMISS_HOLD_MS);
+                    }
+                    return;
+                }
             }
             // Back button: close an open overlay, else go back one route.
             if (isBackKey(event)) {
@@ -452,6 +499,7 @@ const useTVNavigation = () => {
 
         // Capture phase so we run before the polyfill's (bubble) window listener.
         window.addEventListener('keydown', onKeyDown, true);
+        window.addEventListener('keyup', onKeyUp, true);
 
         // Give focus a home on first load and whenever the route / query changes
         // (e.g. picking a genre reloads the catalog). Content can arrive a beat
@@ -464,7 +512,9 @@ const useTVNavigation = () => {
 
         return () => {
             window.removeEventListener('keydown', onKeyDown, true);
+            window.removeEventListener('keyup', onKeyUp, true);
             window.removeEventListener('hashchange', onHashChange);
+            clearTimeout(okTimer);
             timers.forEach(clearTimeout);
         };
     }, []);

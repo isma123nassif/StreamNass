@@ -86,7 +86,7 @@ const MetaItem = React.memo(({ className, type, name, poster, posterShape, poste
             <div className={classnames(styles['poster-container'], { 'poster-change-cursor': posterChangeCursor })}>
                 {
                     onDismissClick ?
-                        <div title={t('LIBRARY_RESUME_DISMISS')} className={styles['dismiss-icon-layer']} onClick={onDismissClick}>
+                        <div data-tv-dismiss="" title={t('LIBRARY_RESUME_DISMISS')} className={styles['dismiss-icon-layer']} onClick={onDismissClick}>
                             <Icon className={styles['dismiss-icon']} name={'close'} />
                             <div className={styles['dismiss-icon-backdrop']} />
                         </div>

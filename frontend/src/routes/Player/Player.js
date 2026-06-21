@@ -92,6 +92,63 @@ const Player = () => {
         return () => setVideoElement(null);
     }, [video.state.manifest]);
 
+    // webOS exposes embedded audio tracks on the native <video> element even when the
+    // streaming-server /tracks/ probe returns none (e.g. direct-played multi-track media),
+    // which otherwise left the audio menu disabled. Read them straight from the element and
+    // use them as a fallback. Read-only: track switching still goes through video.setAudioTrack.
+    const [nativeAudioTracks, setNativeAudioTracks] = React.useState([]);
+    const [nativeSelectedAudioTrackId, setNativeSelectedAudioTrackId] = React.useState(null);
+    React.useEffect(() => {
+        const videoEl = video.containerRef.current?.querySelector('video');
+        const trackList = videoEl ? videoEl.audioTracks : null;
+        if (!trackList || typeof trackList.addEventListener !== 'function') {
+            setNativeAudioTracks([]);
+            setNativeSelectedAudioTrackId(null);
+            return;
+        }
+        const rebuild = () => {
+            const list = [];
+            let selected = null;
+            for (let i = 0; i < trackList.length; i++) {
+                const track = trackList[i];
+                const id = 'EMBEDDED_' + i;
+                list.push({
+                    id,
+                    lang: track.language || 'und',
+                    label: track.label || null,
+                    origin: 'EMBEDDED',
+                    embedded: true,
+                    mode: track.enabled ? 'showing' : 'disabled'
+                });
+                if (track.enabled) {
+                    selected = id;
+                }
+            }
+            setNativeAudioTracks(list);
+            setNativeSelectedAudioTrackId(selected);
+        };
+        trackList.addEventListener('addtrack', rebuild);
+        trackList.addEventListener('removetrack', rebuild);
+        trackList.addEventListener('change', rebuild);
+        rebuild();
+        return () => {
+            trackList.removeEventListener('addtrack', rebuild);
+            trackList.removeEventListener('removetrack', rebuild);
+            trackList.removeEventListener('change', rebuild);
+        };
+    }, [video.state.manifest, video.state.stream]);
+
+    // Prefer the streaming-server-provided tracks; fall back to the native ones so the
+    // audio menu still works for multi-track media the server could not probe.
+    const effectiveAudioTracks = (Array.isArray(video.state.audioTracks) && video.state.audioTracks.length > 0) ?
+        video.state.audioTracks
+        :
+        nativeAudioTracks;
+    const effectiveSelectedAudioTrackId = (Array.isArray(video.state.audioTracks) && video.state.audioTracks.length > 0) ?
+        video.state.selectedAudioTrackId
+        :
+        nativeSelectedAudioTrackId;
+
     const [optionsMenuOpen, , closeOptionsMenu, toggleOptionsMenu] = useBinaryState(false);
     const [subtitlesMenuOpen, , closeSubtitlesMenu, toggleSubtitlesMenu] = useBinaryState(false);
     const [audioMenuOpen, , closeAudioMenu, toggleAudioMenu] = useBinaryState(false);
@@ -1137,7 +1194,7 @@ const Player = () => {
                 muted={video.state.muted}
                 playbackSpeed={video.state.playbackSpeed}
                 subtitlesTracks={allSubtitleTracks}
-                audioTracks={video.state.audioTracks}
+                audioTracks={effectiveAudioTracks}
                 metaItem={player.metaItem}
                 nextVideo={player.nextVideo}
                 stream={player.selected !== null ? player.selected.stream : null}
@@ -1203,8 +1260,8 @@ const Player = () => {
             <Transition when={audioMenuOpen} name={'fade'}>
                 <AudioMenu
                     className={classnames(styles['layer'], styles['menu-layer'])}
-                    audioTracks={video.state.audioTracks}
-                    selectedAudioTrackId={video.state.selectedAudioTrackId}
+                    audioTracks={effectiveAudioTracks}
+                    selectedAudioTrackId={effectiveSelectedAudioTrackId}
                     onAudioTrackSelected={onAudioTrackSelected}
                 />
             </Transition>

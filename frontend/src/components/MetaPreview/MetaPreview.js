@@ -112,7 +112,7 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
         },
     ], [inLibrary, watched, toggleInLibrary, toggleWatched]);
     return (
-        <div className={classnames(className, styles['meta-preview-container'], { [styles['compact']]: compact })} ref={ref}>
+        <div data-tv-skip="" className={classnames(className, styles['meta-preview-container'], { [styles['compact']]: compact })} ref={ref}>
             {
                 typeof background === 'string' && background.length > 0 ?
                     <div className={styles['background-image-layer']}>
