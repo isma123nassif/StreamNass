@@ -11,3 +11,6 @@ frontend/yarn.lock
 frontend/npm-debug.log
 
 .DS_Store
+
+# Local TMDB API key (injected at build, never commit)
+.tmdb_key

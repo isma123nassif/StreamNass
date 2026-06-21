@@ -40,6 +40,12 @@ build: service/server.js service/bin/ffmpeg service/bin/ffprobe
 	@echo "==> Injecting streaming-server URL (:8080 proxy) into index.html..."
 	@grep -q '__STREMIO_SERVER_URL__' service/www/index.html || \
 		sed -i 's#</head>#<script>window.__STREMIO_SERVER_URL__="http://127.0.0.1:8080/";</script></head>#' service/www/index.html
+	@if [ -f .tmdb_key ]; then \
+		echo "==> Injecting TMDB API key (local .tmdb_key) into index.html..."; \
+		KEY=$$(tr -d '\n\r' < .tmdb_key); \
+		grep -q '__TMDB_API_KEY__' service/www/index.html || \
+			sed -i "s#</head>#<script>window.__TMDB_API_KEY__=\"$$KEY\";</script></head>#" service/www/index.html; \
+	fi
 	@echo "==> Build complete"
 
 package: build

@@ -11,6 +11,7 @@ const { useNavigateWithOrigin } = require('stremio/common/useNavigateWithOrigin'
 const { VerticalNavBar, HorizontalNavBar, DelayedRenderer, Image, MetaPreview, ModalDialog } = require('stremio/components');
 const StreamsList = require('./StreamsList');
 const VideosList = require('./VideosList');
+const MetaExtras = require('./MetaExtras');
 const useMetaDetails = require('./useMetaDetails');
 const useSeason = require('./useSeason');
 const useMetaExtensionTabs = require('./useMetaExtensionTabs');
@@ -147,7 +148,8 @@ const MetaDetails = () => {
                 navMenu={true}
                 originPath={originPath}
             />
-            <div ref={contentRef} data-tv-content="" className={styles['metadetails-content']}>
+            <div data-tv-content="" className={styles['content-scroll']}>
+            <div ref={contentRef} className={styles['metadetails-content']}>
                 {
                     tabs.length > 0 ?
                         <VerticalNavBar
@@ -231,6 +233,8 @@ const MetaDetails = () => {
                             :
                             null
                 }
+            </div>
+            <MetaExtras type={type} id={id} />
             </div>
             {
                 metaExtension !== null ?
