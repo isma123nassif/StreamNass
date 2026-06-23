@@ -916,14 +916,25 @@ const Player = () => {
                 return;
             }
 
+            // ---- Back: close whatever overlay is open, else leave the player.
+            // A single press always gets you out (no "hide controls first" step),
+            // which is the expected TV behaviour. The next-video popup must be
+            // dismissed explicitly because closeMenus() does not cover it.
+            if (isBack) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                if (s.nextVideoPopupOpen) {
+                    s.dismissNextVideoPopup();
+                } else if (s.menusOpen) {
+                    s.closeMenus();
+                } else {
+                    s.navigate(-1);
+                }
+                return;
+            }
+
             // ---- A menu / side drawer is open ----
             if (s.menusOpen) {
-                if (isBack) {
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    s.closeMenus();
-                    return;
-                }
                 if (dir === 'up' || dir === 'down') {
                     const items = getMenuItems();
                     if (items.length > 0) {
@@ -938,18 +949,6 @@ const Player = () => {
                     return;
                 }
                 // OK / left / right: let the focused Button + polyfill handle it.
-                return;
-            }
-
-            // ---- Back: exit player (controls visible while playing → hide first) ----
-            if (isBack) {
-                event.preventDefault();
-                event.stopImmediatePropagation();
-                if (s.controlsVisible && s.paused === false) {
-                    s.hideControls();
-                } else {
-                    s.navigate(-1);
-                }
                 return;
             }
 
@@ -1078,12 +1077,14 @@ const Player = () => {
 
     tvRef.current = {
         menusOpen,
+        nextVideoPopupOpen,
         controlsVisible: !overlayHidden,
         paused: video.state.paused,
         onPlayPause,
         onSeekPrev,
         onSeekNext,
         closeMenus,
+        dismissNextVideoPopup: onDismissNextVideoPopup,
         navigate,
         controlBarRef,
         playerRef,

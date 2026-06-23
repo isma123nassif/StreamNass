@@ -333,27 +333,99 @@ const useTVNavigation = () => {
             return true;
         };
 
-        // Long-press OK (Enter) on a "Continue Watching" poster removes it; a short
-        // press still plays. Such items expose the dismiss target via [data-tv-dismiss].
-        let okHeld = false;
-        let okTimer = null;
-        let okLongFired = false;
-        const DISMISS_HOLD_MS = 500;
+        // Hold OK (Enter) on a poster to open its contextual menu (Reproducir,
+        // Ver detalles, Quitar…); a short press keeps the normal action (open /
+        // resume). Posters expose the menu trigger via [data-tv-context].
+        //
+        // webOS's OK button is awkward: it fires a stream of repeating Enter
+        // keydowns AND synthetic (isTrusted=false) click events on the focused
+        // element — those clicks navigate away instantly. So while OK is held we
+        // swallow those synthetic clicks; a watchdog timer opens the menu once the
+        // hold passes the threshold (no need to release — that felt unintuitive),
+        // and a short release before then performs the normal action ourselves.
+        const HOLD_MS = 450;
         const isEnter = (event) => event.key === 'Enter' || event.keyCode === 13;
-        const onKeyUp = (event) => {
-            if (!isEnter(event) || !okHeld) {
+        let enterDown = false;
+        let pressPoster = null;
+        let pressCtxEl = null;
+        let menuOpened = false;
+        let openTimer = null;
+        let enterWatchdog = null;
+        // True only while we dispatch our own click(), so the click-suppressor lets
+        // that one through instead of mistaking it for a stray webOS nav click.
+        let bypassClick = false;
+
+        const contextElOf = (el) =>
+            el && typeof el.querySelector === 'function' ? el.querySelector('[data-tv-context]') : null;
+
+        const fireClick = (el) => {
+            if (!el || typeof el.click !== 'function') {
                 return;
             }
-            okHeld = false;
-            clearTimeout(okTimer);
-            if (!okLongFired) {
-                // Short press: trigger the focused item's normal action (play).
-                const active = document.activeElement;
-                if (active && typeof active.click === 'function') {
-                    active.click();
-                }
+            bypassClick = true;
+            try {
+                el.click();
+            } finally {
+                bypassClick = false;
             }
-            okLongFired = false;
+        };
+
+        const resetPress = () => {
+            enterDown = false;
+            pressPoster = null;
+            pressCtxEl = null;
+            menuOpened = false;
+            clearTimeout(openTimer);
+            openTimer = null;
+            clearTimeout(enterWatchdog);
+            enterWatchdog = null;
+        };
+
+        // Open the focused poster's contextual menu and drop focus on its first
+        // option so the remote can pick straight away (retried — the overlay renders
+        // a beat after the click).
+        const focusOverlay = (tries) => {
+            const scope = getOverlayScope();
+            const items = scope ? collectFocusables(scope) : [];
+            if (items.length > 0) {
+                moveFocus(items[0]);
+            } else if (tries > 0) {
+                setTimeout(() => focusOverlay(tries - 1), 70);
+            }
+        };
+        const openContextMenu = (triggerEl) => {
+            fireClick(triggerEl);
+            setTimeout(() => focusOverlay(4), 60);
+        };
+
+        // webOS synthesises (isTrusted=false) click events from the OK button on the
+        // focused element. While OK is held on a context poster we never want those
+        // raw clicks to act (neither navigate the poster nor auto-pick the menu option
+        // that just got focus) — OK is routed through the hold timer / key-up instead.
+        // Real pointer clicks are trusted, so they pass through untouched.
+        const onClickCapture = (event) => {
+            if (bypassClick) {
+                return;
+            }
+            if (event.isTrusted === false && event.detail === 0 &&
+                (enterDown || contextElOf(document.activeElement))) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }
+        };
+
+        const onKeyUp = (event) => {
+            if (!isEnter(event) || !enterDown) {
+                return;
+            }
+            const opened = menuOpened;
+            const poster = pressPoster;
+            resetPress();
+            // Released before the menu opened → it was a short press: do the poster's
+            // normal action ourselves (we swallowed webOS's own click while OK held).
+            if (!opened && poster) {
+                fireClick(poster);
+            }
         };
 
         const onKeyDown = (event) => {
@@ -362,23 +434,27 @@ const useTVNavigation = () => {
             if (isPlayerRoute()) {
                 return;
             }
-            // Long-press OK removes a Continue Watching item; short press plays it.
+            // Hold OK on a poster with a contextual menu: take over Enter so webOS's
+            // keydown→click can't navigate, and start the hold timer that pops the
+            // menu open while the button is still held.
             if (isEnter(event)) {
-                const active = document.activeElement;
-                const dismissEl = active && typeof active.querySelector === 'function' ?
-                    active.querySelector('[data-tv-dismiss]') : null;
-                if (dismissEl) {
-                    // Take over Enter so the button doesn't play immediately; the hold
-                    // duration decides (keyup before timer = play, timer fires = dismiss).
+                const ctxEl = contextElOf(document.activeElement);
+                if (ctxEl) {
                     event.preventDefault();
                     event.stopImmediatePropagation();
-                    if (!okHeld) {
-                        okHeld = true;
-                        okLongFired = false;
-                        okTimer = setTimeout(() => {
-                            okLongFired = true;
-                            dismissEl.click();
-                        }, DISMISS_HOLD_MS);
+                    if (!enterDown) {
+                        enterDown = true;
+                        pressPoster = document.activeElement;
+                        pressCtxEl = ctxEl;
+                        menuOpened = false;
+                        openTimer = setTimeout(() => {
+                            menuOpened = true;
+                            openContextMenu(pressCtxEl);
+                        }, HOLD_MS);
+                        // Safety net: if the matching key-up never arrives, don't leave
+                        // the press wedged.
+                        clearTimeout(enterWatchdog);
+                        enterWatchdog = setTimeout(resetPress, 4000);
                     }
                     return;
                 }
@@ -500,6 +576,7 @@ const useTVNavigation = () => {
         // Capture phase so we run before the polyfill's (bubble) window listener.
         window.addEventListener('keydown', onKeyDown, true);
         window.addEventListener('keyup', onKeyUp, true);
+        window.addEventListener('click', onClickCapture, true);
 
         // Give focus a home on first load and whenever the route / query changes
         // (e.g. picking a genre reloads the catalog). Content can arrive a beat
@@ -513,8 +590,10 @@ const useTVNavigation = () => {
         return () => {
             window.removeEventListener('keydown', onKeyDown, true);
             window.removeEventListener('keyup', onKeyUp, true);
+            window.removeEventListener('click', onClickCapture, true);
             window.removeEventListener('hashchange', onHashChange);
-            clearTimeout(okTimer);
+            clearTimeout(openTimer);
+            clearTimeout(enterWatchdog);
             timers.forEach(clearTimeout);
         };
     }, []);

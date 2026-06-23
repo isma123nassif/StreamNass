@@ -415,6 +415,73 @@
     }
 }
 
+// TV remote contextual menu: opens over the poster on a long OK press. Mostly
+// transparent (the poster still shows through) with big, D-pad-navigable options.
+.tv-context-menu {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.7rem;
+    box-sizing: border-box;
+    overflow-y: auto;
+    scrollbar-width: none;
+    border-radius: var(--border-radius);
+    background: linear-gradient(to top, rgba(8, 9, 15, 0.8) 0%, rgba(8, 9, 15, 0.5) 55%, rgba(8, 9, 15, 0.3) 100%);
+    backdrop-filter: blur(2px);
+    animation: tv-context-fade 0.12s ease-out;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tv-context-option {
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 0.65rem 0.5rem;
+        border-radius: 0.6rem;
+        font-size: 1.3rem;
+        font-weight: 600;
+        line-height: 1.15;
+        color: var(--primary-foreground-color);
+        background-color: rgba(255, 255, 255, 0.09);
+        border: 0.1rem solid rgba(255, 255, 255, 0.12);
+        outline: none;
+        transition: transform 0.1s ease-out, background-color 0.1s ease-out, box-shadow 0.1s ease-out;
+
+        &:hover {
+            background-color: rgba(255, 255, 255, 0.18);
+        }
+
+        &:focus {
+            background-color: var(--primary-accent-color);
+            color: #0b0d18;
+            transform: scale(1.05);
+            box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.55);
+        }
+    }
+}
+
+@keyframes tv-context-fade {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
 @media only screen and (max-width: @minimum) {
     .meta-item-container {
         padding: 0.5rem;

@@ -9,7 +9,6 @@ const { default: Icon } = require('@stremio/stremio-icons/react');
 const { useNavigateWithOrigin } = require('stremio/common/useNavigateWithOrigin');
 const { default: Button } = require('stremio/components/Button');
 const { default: Image } = require('stremio/components/Image');
-const Multiselect = require('stremio/components/Multiselect');
 const useBinaryState = require('stremio/common/useBinaryState');
 const { ICON_FOR_TYPE } = require('stremio/common/CONSTANTS');
 const styles = require('./styles');
@@ -18,6 +17,7 @@ const MetaItem = React.memo(({ className, type, name, poster, posterShape, poste
     const { t } = useTranslation();
     const { navigateWithOrigin } = useNavigateWithOrigin();
     const [menuOpen, onMenuOpen, onMenuClose] = useBinaryState(false);
+    const posterRef = React.useRef(null);
     // imdbRating may arrive as a string ("7.8") or a number; normalise to a
     // non-empty string or null so the rating only renders when it really exists.
     const ratingText = React.useMemo(() => {
@@ -58,31 +58,49 @@ const MetaItem = React.memo(({ className, type, name, poster, posterShape, poste
             props.onClick(event);
         }
     }, [href, navigateWithOrigin, props.onClick]);
-    const menuOnClick = React.useCallback((event) => {
-        event.nativeEvent.selectPrevented = true;
-    }, []);
-    const menuOnSelect = React.useCallback((event) => {
+    const closeContextMenu = React.useCallback(() => {
+        onMenuClose();
+        // Return focus to the poster so the D-pad keeps going from where it was.
+        if (posterRef.current && typeof posterRef.current.focus === 'function') {
+            try { posterRef.current.focus(); } catch (_) { /* noop */ }
+        }
+    }, [onMenuClose]);
+    const onContextTriggerClick = React.useCallback((event) => {
+        // Open our own over-the-poster menu instead of navigating into the title.
+        event.preventDefault();
+        event.stopPropagation();
+        onMenuOpen();
+    }, [onMenuOpen]);
+    const onContextOptionClick = React.useCallback((event, value) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeContextMenu();
         if (typeof optionOnSelect === 'function') {
             optionOnSelect({
                 type: 'select-option',
-                value: event.value,
+                value: value,
                 dataset: dataset,
-                reactEvent: event.reactEvent,
+                reactEvent: event,
                 nativeEvent: event.nativeEvent
             });
         }
-    }, [dataset, optionOnSelect]);
+    }, [optionOnSelect, dataset, closeContextMenu]);
+    const onContextMenuKeyDown = React.useCallback((event) => {
+        // Back (synthesised as Escape by the TV nav engine) closes the menu.
+        if (event.key === 'Escape' || event.keyCode === 27) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeContextMenu();
+        }
+    }, [closeContextMenu]);
     const renderPosterFallback = React.useCallback(() => (
         <Icon
             className={styles['placeholder-icon']}
             name={ICON_FOR_TYPE.has(type) ? ICON_FOR_TYPE.get(type) : ICON_FOR_TYPE.get('other')}
         />
     ), [type]);
-    const renderMenuLabelContent = React.useCallback(() => (
-        <Icon className={styles['icon']} name={'more-vertical'} />
-    ), []);
     return (
-        <Button title={name} href={href} {...filterInvalidDOMProps(props)} className={classnames(className, styles['meta-item-container'], styles['poster-shape-poster'], styles[`poster-shape-${posterShape}`], { 'active': menuOpen })} onClick={metaItemOnClick}>
+        <Button ref={posterRef} title={name} href={href} {...filterInvalidDOMProps(props)} className={classnames(className, styles['meta-item-container'], styles['poster-shape-poster'], styles[`poster-shape-${posterShape}`], { 'active': menuOpen })} onClick={metaItemOnClick}>
             <div className={classnames(styles['poster-container'], { 'poster-change-cursor': posterChangeCursor })}>
                 {
                     onDismissClick ?
@@ -143,6 +161,26 @@ const MetaItem = React.memo(({ className, type, name, poster, posterShape, poste
                         :
                         null
                 }
+                {
+                    menuOpen && Array.isArray(options) && options.length > 0 ?
+                        <div data-tv-scope="poster-menu" className={styles['tv-context-menu']} onKeyDown={onContextMenuKeyDown}>
+                            {
+                                options.map((option) => (
+                                    <Button
+                                        key={option.value}
+                                        tabIndex={0}
+                                        title={option.label}
+                                        className={styles['tv-context-option']}
+                                        onClick={(event) => onContextOptionClick(event, option.value)}
+                                    >
+                                        {option.label}
+                                    </Button>
+                                ))
+                            }
+                        </div>
+                        :
+                        null
+                }
             </div>
             {
                 (typeof name === 'string' && name.length > 0) || (Array.isArray(options) && options.length > 0) ?
@@ -152,16 +190,15 @@ const MetaItem = React.memo(({ className, type, name, poster, posterShape, poste
                         </div>
                         {
                             Array.isArray(options) && options.length > 0 ?
-                                <Multiselect
+                                <Button
                                     className={styles['menu-label-container']}
-                                    renderLabelContent={renderMenuLabelContent}
-                                    options={options}
-                                    onOpen={onMenuOpen}
-                                    onClose={onMenuClose}
-                                    onSelect={menuOnSelect}
                                     tabIndex={-1}
-                                    onClick={menuOnClick}
-                                />
+                                    data-tv-context=""
+                                    title={t('MORE')}
+                                    onClick={onContextTriggerClick}
+                                >
+                                    <Icon className={styles['icon']} name={'more-vertical'} />
+                                </Button>
                                 :
                                 null
                         }
