@@ -72,7 +72,9 @@
     --warning-accent-color: rgba(255, 165, 0, 1);
     --danger-accent-color: rgba(220, 38, 38, 1);
     --border-radius: 0.6rem;
-    --card-focus-glow: 0 0 0 0.18rem var(--primary-accent-color), 0 0.6rem 1.6rem rgba(0, 0, 0, 0.6);
+    // Crisp accent ring + a small, cheap drop shadow. A big blurred shadow (the
+    // old 1.6rem) is expensive to repaint on the TV's GPU every time focus moves.
+    --card-focus-glow: 0 0 0 0.2rem var(--primary-accent-color), 0 0.2rem 0.5rem rgba(0, 0, 0, 0.5);
     --top-overlay-size: @top-overlay-size;
     --bottom-overlay-size: @bottom-overlay-size;
     --overlap-size: @overlap-size;

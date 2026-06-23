@@ -227,6 +227,42 @@ const nearestByAxis = (origin, items, axis) => {
     return best;
 };
 
+// Leftmost focusable in the nearest row above ('up') / below ('down') the given
+// reference rect. Used to hop rows at the horizontal end of a row.
+const firstItemOfAdjacentRow = (items, refRect, dir) => {
+    const refMid = refRect.top + refRect.height / 2;
+    const tol = Math.max(refRect.height * 0.5, 12);
+    let rowMid = null;
+    for (const it of items) {
+        const r = it.getBoundingClientRect();
+        const mid = r.top + r.height / 2;
+        const beyond = dir === 'down' ? mid > refMid + tol : mid < refMid - tol;
+        if (!beyond) {
+            continue;
+        }
+        if (rowMid === null || (dir === 'down' ? mid < rowMid : mid > rowMid)) {
+            rowMid = mid;
+        }
+    }
+    if (rowMid === null) {
+        return null;
+    }
+    let best = null;
+    let bestLeft = Infinity;
+    for (const it of items) {
+        const r = it.getBoundingClientRect();
+        const mid = r.top + r.height / 2;
+        if (Math.abs(mid - rowMid) > tol) {
+            continue;
+        }
+        if (r.left < bestLeft) {
+            bestLeft = r.left;
+            best = it;
+        }
+    }
+    return best;
+};
+
 const moveFocus = (el) => {
     if (!el) {
         return;
@@ -428,6 +464,188 @@ const useTVNavigation = () => {
             }
         };
 
+        // --- Content focusables cache --------------------------------------
+        // Re-querying every focusable and re-running visibility/skip checks on
+        // each key press is the main source of input lag on the TV. The set of
+        // focusable ELEMENTS only changes when the DOM does (catalogs load, route
+        // switches), so cache it and invalidate on mutations / route changes.
+        // Geometry is still measured fresh per move (it shifts as the row scrolls).
+        let contentItems = null;
+        let contentScope = null;
+        let contentDirty = true;
+        const markContentDirty = () => { contentDirty = true; };
+        const getContentItems = () => {
+            const scope = getContent();
+            if (contentDirty || scope !== contentScope || contentItems === null) {
+                contentScope = scope;
+                contentItems = collectFocusables(scope);
+                contentDirty = false;
+            }
+            return contentItems;
+        };
+        const contentObserver = new MutationObserver(markContentDirty);
+
+        // --- Per-frame move coalescing -------------------------------------
+        // webOS fires a burst of repeating keydowns while a direction is held;
+        // doing a full focus move for each backs up the event loop and makes
+        // navigation feel like it's dragging. Coalesce to one move per frame.
+        let pendingDir = null;
+        let moveRaf = null;
+        const performMove = (dir) => {
+            const active = document.activeElement;
+
+            // Overlays trap navigation inside themselves.
+            const overlay = getOverlayScope();
+            if (overlay) {
+                const items = collectFocusables(overlay);
+                if (items.length === 0) {
+                    return;
+                }
+                if (!active || active === document.body || !overlay.contains(active)) {
+                    moveFocus(items[0]);
+                } else {
+                    moveFocus(bestCandidate(active, dir, items) || active);
+                }
+                return;
+            }
+
+            const region = regionOf(active);
+
+            // ---- Side bar (left column) ----
+            if (region === 'sidebar') {
+                const items = collectFocusables(getSidebar(), NAV_FOCUSABLE_SELECTOR);
+                if (dir === 'up' || dir === 'down') {
+                    moveFocus(bestCandidate(active, dir, items) || active);
+                } else if (dir === 'right') {
+                    enterContent(active);
+                }
+                // left: already at the far edge — nothing to do.
+                return;
+            }
+
+            // ---- Top bar (search / fullscreen / menu) ----
+            if (region === 'topbar') {
+                const items = collectFocusables(getTopbar(), NAV_FOCUSABLE_SELECTOR);
+                if (dir === 'left' || dir === 'right') {
+                    moveFocus(bestCandidate(active, dir, items) || active);
+                } else if (dir === 'down') {
+                    enterContent(active);
+                }
+                // up: nothing above.
+                return;
+            }
+
+            // ---- Content area ----
+            const items = getContentItems();
+            if (items.length === 0) {
+                return;
+            }
+            if (!active || active === document.body || !contentScope || !contentScope.contains(active)) {
+                moveFocus(items[0]);
+                setRouteFocus(items[0]);
+                return;
+            }
+
+            // Horizontal moves stay WITHIN the current visual row (so we never jump
+            // to a random other row). At the end of a row we land on its "see all"
+            // / "Mostrar más" button, and only the next press hops to the next row.
+            if (dir === 'left' || dir === 'right') {
+                const onMore = typeof active.hasAttribute === 'function' && active.hasAttribute('data-tv-more');
+                const aRect = active.getBoundingClientRect();
+                const aMid = aRect.top + aRect.height / 2;
+                const tol = Math.max(aRect.height * 0.5, 12);
+                const rowItems = items.filter((it) => {
+                    const r = it.getBoundingClientRect();
+                    return Math.abs((r.top + r.height / 2) - aMid) < tol;
+                });
+
+                if (dir === 'right') {
+                    if (onMore) {
+                        // From "see all" → first card of the next row.
+                        const down = firstItemOfAdjacentRow(items, aRect, 'down');
+                        if (down) {
+                            moveFocus(down);
+                            setRouteFocus(down);
+                        }
+                        return;
+                    }
+                    const cand = bestCandidate(active, 'right', rowItems);
+                    if (cand) {
+                        moveFocus(cand);
+                        setRouteFocus(cand);
+                        return;
+                    }
+                    // End of the row → its "see all" button if present…
+                    const row = typeof active.closest === 'function' ? active.closest('[data-tv-row]') : null;
+                    const more = row ? row.querySelector('[data-tv-more]') : null;
+                    if (more && more !== active && isVisible(more)) {
+                        moveFocus(more);
+                        return;
+                    }
+                    // …otherwise hop straight to the next row.
+                    const down = firstItemOfAdjacentRow(items, aRect, 'down');
+                    if (down) {
+                        moveFocus(down);
+                        setRouteFocus(down);
+                    }
+                    return;
+                }
+
+                // left
+                if (onMore) {
+                    // From "see all" → back to the last card of its row.
+                    const row = typeof active.closest === 'function' ? active.closest('[data-tv-row]') : null;
+                    const rowPosters = row ? items.filter((it) => row.contains(it)) : rowItems;
+                    const last = rowPosters[rowPosters.length - 1];
+                    if (last) {
+                        moveFocus(last);
+                        setRouteFocus(last);
+                    }
+                    return;
+                }
+                const cand = bestCandidate(active, 'left', rowItems);
+                if (cand) {
+                    moveFocus(cand);
+                    setRouteFocus(cand);
+                    return;
+                }
+                // Start of the row → jump to the side bar.
+                const sidebarItems = collectFocusables(getSidebar(), NAV_FOCUSABLE_SELECTOR);
+                const toSidebar = nearestByAxis(active, sidebarItems, 'y');
+                if (toSidebar) {
+                    moveFocus(toSidebar);
+                }
+                return;
+            }
+
+            // Vertical: nearest item in that direction across rows; at the top edge
+            // jump up into the top bar.
+            let next = bestCandidate(active, dir, items);
+            if (!next && dir === 'up') {
+                const topbarItems = collectFocusables(getTopbar(), NAV_FOCUSABLE_SELECTOR);
+                next = nearestByAxis(active, topbarItems, 'x');
+            }
+            if (next) {
+                moveFocus(next);
+                if (regionOf(next) === 'content') {
+                    setRouteFocus(next);
+                }
+            }
+        };
+        const scheduleMove = (dir) => {
+            pendingDir = dir;
+            if (moveRaf === null) {
+                moveRaf = requestAnimationFrame(() => {
+                    moveRaf = null;
+                    const d = pendingDir;
+                    pendingDir = null;
+                    if (d) {
+                        performMove(d);
+                    }
+                });
+            }
+        };
+
         const onKeyDown = (event) => {
             // The video player owns ALL remote keys (its own TV control scheme in
             // Player.js handles arrows / OK / Back). Stay completely out of the way.
@@ -499,78 +717,10 @@ const useTVNavigation = () => {
             }
 
             // We own the arrow keys: no native page scroll, no polyfill handling.
+            // The actual focus move is coalesced to one per animation frame.
             event.preventDefault();
             event.stopImmediatePropagation();
-
-            // Overlays trap navigation inside themselves.
-            const overlay = getOverlayScope();
-            if (overlay) {
-                const items = collectFocusables(overlay);
-                if (items.length === 0) {
-                    return;
-                }
-                if (!active || active === document.body || !overlay.contains(active)) {
-                    moveFocus(items[0]);
-                } else {
-                    moveFocus(bestCandidate(active, dir, items) || active);
-                }
-                return;
-            }
-
-            const region = regionOf(active);
-
-            // ---- Side bar (left column) ----
-            if (region === 'sidebar') {
-                const items = collectFocusables(getSidebar(), NAV_FOCUSABLE_SELECTOR);
-                if (dir === 'up' || dir === 'down') {
-                    moveFocus(bestCandidate(active, dir, items) || active);
-                } else if (dir === 'right') {
-                    enterContent(active);
-                }
-                // left: already at the far edge — nothing to do.
-                return;
-            }
-
-            // ---- Top bar (search / fullscreen / menu) ----
-            if (region === 'topbar') {
-                const items = collectFocusables(getTopbar(), NAV_FOCUSABLE_SELECTOR);
-                if (dir === 'left' || dir === 'right') {
-                    moveFocus(bestCandidate(active, dir, items) || active);
-                } else if (dir === 'down') {
-                    enterContent(active);
-                }
-                // up: nothing above.
-                return;
-            }
-
-            // ---- Content area ----
-            const content = getContent();
-            const items = collectFocusables(content);
-            if (items.length === 0) {
-                return;
-            }
-            if (!active || active === document.body || !content.contains(active)) {
-                moveFocus(items[0]);
-                setRouteFocus(items[0]);
-                return;
-            }
-            let next = bestCandidate(active, dir, items);
-            if (!next) {
-                // At a content edge: jump to the adjacent region.
-                if (dir === 'left') {
-                    const sidebarItems = collectFocusables(getSidebar(), NAV_FOCUSABLE_SELECTOR);
-                    next = nearestByAxis(active, sidebarItems, 'y');
-                } else if (dir === 'up') {
-                    const topbarItems = collectFocusables(getTopbar(), NAV_FOCUSABLE_SELECTOR);
-                    next = nearestByAxis(active, topbarItems, 'x');
-                }
-            }
-            if (next) {
-                moveFocus(next);
-                if (regionOf(next) === 'content') {
-                    setRouteFocus(next);
-                }
-            }
+            scheduleMove(dir);
         };
 
         // Capture phase so we run before the polyfill's (bubble) window listener.
@@ -578,11 +728,17 @@ const useTVNavigation = () => {
         window.addEventListener('keyup', onKeyUp, true);
         window.addEventListener('click', onClickCapture, true);
 
+        // Invalidate the focusables cache whenever the DOM changes (catalogs
+        // load, routes mount/unmount). The callback only flips a flag, so it's
+        // cheap even if it fires a lot; the list is rebuilt lazily on next move.
+        contentObserver.observe(document.body, { childList: true, subtree: true });
+
         // Give focus a home on first load and whenever the route / query changes
         // (e.g. picking a genre reloads the catalog). Content can arrive a beat
         // after the route does (async catalogs), so retry a few times.
         const timers = [100, 400, 900, 1600].map((ms) => setTimeout(seedContentFocus, ms));
         const onHashChange = () => {
+            markContentDirty();
             [80, 350, 700, 1200, 1800].forEach((ms) => timers.push(setTimeout(seedContentFocus, ms)));
         };
         window.addEventListener('hashchange', onHashChange);
@@ -592,6 +748,10 @@ const useTVNavigation = () => {
             window.removeEventListener('keyup', onKeyUp, true);
             window.removeEventListener('click', onClickCapture, true);
             window.removeEventListener('hashchange', onHashChange);
+            contentObserver.disconnect();
+            if (moveRaf !== null) {
+                cancelAnimationFrame(moveRaf);
+            }
             clearTimeout(openTimer);
             clearTimeout(enterWatchdog);
             timers.forEach(clearTimeout);

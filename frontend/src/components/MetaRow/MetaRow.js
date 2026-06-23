@@ -27,7 +27,7 @@ const MetaRow = ({ className, title, catalog, message, itemComponent, notificati
     }, [catalog]);
 
     return (
-        <div className={classnames(className, styles['meta-row-container'])}>
+        <div data-tv-row="" className={classnames(className, styles['meta-row-container'])}>
             <div className={styles['header-container']}>
                 {
                     typeof catalogTitle === 'string' && catalogTitle.length > 0 ?
@@ -37,7 +37,7 @@ const MetaRow = ({ className, title, catalog, message, itemComponent, notificati
                 }
                 {
                     href ?
-                        <Button className={styles['see-all-container']} title={t.string('BUTTON_SEE_ALL')} href={href} tabIndex={-1}>
+                        <Button className={styles['see-all-container']} title={t.string('BUTTON_SEE_ALL')} href={href} tabIndex={-1} data-tv-more="">
                             <div className={styles['label']}>{ t.string('BUTTON_SEE_ALL') }</div>
                             <Icon className={styles['icon']} name={'chevron-forward'} />
                         </Button>
